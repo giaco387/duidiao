@@ -1,0 +1,2018 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="theme-color" content="#0a5d2e">
+<title>赤峰对调</title>
+<script src="https://unpkg.com/peerjs@1.5.4/dist/peerjs.min.js"></script>
+<style>
+  * { box-sizing: border-box; }
+  body {
+    margin: 0; padding: 0;
+    font-family: "PingFang SC", "Microsoft YaHei", sans-serif;
+    background: linear-gradient(135deg, #0a5d2e 0%, #0d7c3a 100%);
+    color: #fff;
+    min-height: 100vh;
+    user-select: none;
+  }
+  #game {
+    max-width: 1200px;
+    margin: 0 auto;
+    padding: 12px;
+    display: grid;
+    grid-template-rows: auto 1fr auto;
+    min-height: 100vh;
+  }
+  /* Status bar */
+  #status-bar {
+    display: flex;
+    gap: 16px;
+    align-items: center;
+    padding: 8px 14px;
+    background: rgba(0,0,0,0.35);
+    border-radius: 8px;
+    font-size: 14px;
+    flex-wrap: wrap;
+  }
+  #status-bar .item { display: flex; gap: 6px; align-items: center; }
+  #status-bar .label { color: #cde; }
+  #status-bar .val { color: #ffd76b; font-weight: bold; }
+  #status-bar .msg { flex: 1; color: #fff; min-width: 240px; }
+
+  /* Table */
+  #table {
+    position: relative;
+    margin: 12px 0;
+    border: 3px solid rgba(255,255,255,0.15);
+    border-radius: 200px / 120px;
+    min-height: 540px;
+    background: radial-gradient(ellipse at center, rgba(255,255,255,0.05) 0%, rgba(0,0,0,0.15) 100%);
+    padding: 16px;
+  }
+  .seat {
+    position: absolute;
+    text-align: center;
+  }
+  .seat-name {
+    background: rgba(0,0,0,0.45);
+    padding: 4px 12px;
+    border-radius: 14px;
+    font-size: 13px;
+    margin-bottom: 4px;
+    display: inline-block;
+  }
+  .seat-name.dealer { background: #c0392b; }
+  .seat-name.declarer { background: #d4a017; color: #000; }
+  .seat-name.current { box-shadow: 0 0 0 2px #ffd76b; }
+  .seat.north { top: 8px; left: 50%; transform: translateX(-50%); }
+  .seat.south { bottom: 8px; left: 50%; transform: translateX(-50%); }
+  .seat.west { left: 8px; top: 50%; transform: translateY(-50%); }
+  .seat.east { right: 8px; top: 50%; transform: translateY(-50%); }
+
+  /* Played cards */
+  .played-cards {
+    min-height: 80px;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    gap: 2px;
+    margin-top: 6px;
+  }
+  .center-info {
+    position: absolute;
+    top: 50%; left: 50%;
+    transform: translate(-50%, -50%);
+    text-align: center;
+    color: #ffd76b;
+    font-size: 14px;
+    pointer-events: none;
+  }
+  .center-info .big { font-size: 28px; font-weight: bold; }
+
+  /* Card */
+  .card {
+    display: inline-block;
+    width: 44px; height: 64px;
+    background: #fff;
+    border-radius: 5px;
+    color: #000;
+    text-align: left;
+    padding: 4px 6px;
+    font-weight: bold;
+    box-shadow: 0 2px 4px rgba(0,0,0,0.35);
+    position: relative;
+    font-family: "Trebuchet MS", sans-serif;
+  }
+  .card.red { color: #d11; }
+  .card .rank { font-size: 16px; line-height: 1; }
+  .card .suit { font-size: 18px; line-height: 1; }
+  .card .center {
+    position: absolute;
+    top: 50%; left: 50%;
+    transform: translate(-50%, -50%);
+    font-size: 22px;
+  }
+  .card.back {
+    background: repeating-linear-gradient(45deg, #144a91, #144a91 6px, #0e3a73 6px, #0e3a73 12px);
+    color: transparent;
+  }
+  .card.joker { background: #fffbe6; }
+  .card.joker .center { font-size: 11px; color: #c00; white-space: nowrap; }
+  .card.joker.small .center { color: #000; }
+  .card.trump-mark::after {
+    content: '主';
+    position: absolute;
+    bottom: 2px; right: 2px;
+    font-size: 9px;
+    color: #b00;
+    background: #ffe;
+    border-radius: 2px;
+    padding: 0 2px;
+  }
+
+  /* Hand */
+  #hand-area {
+    background: rgba(0,0,0,0.3);
+    border-radius: 10px;
+    padding: 12px;
+    min-height: 110px;
+  }
+  #hand {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 4px;
+    justify-content: center;
+    margin-bottom: 8px;
+  }
+  #hand .card {
+    cursor: pointer;
+    transition: transform 0.12s;
+  }
+  #hand .card:hover { transform: translateY(-6px); }
+  #hand .card.selected { transform: translateY(-12px); box-shadow: 0 6px 10px rgba(255,215,107,0.6); outline: 2px solid #ffd76b; z-index: 10; position: relative; }
+  #hand .card { position: relative; touch-action: manipulation; }
+  #hand .card.must { box-shadow: 0 0 0 2px #5cf, 0 2px 4px rgba(0,0,0,0.35); }
+  #hand .card.dim { opacity: 0.45; }
+  #hint-bar {
+    background: rgba(0,0,0,0.4);
+    color: #aef;
+    padding: 6px 12px;
+    border-radius: 6px;
+    margin-bottom: 8px;
+    font-size: 13px;
+    min-height: 22px;
+    border-left: 3px solid #5cf;
+  }
+  #hint-bar.empty { display: none; }
+  .opp-hand {
+    display: flex;
+    justify-content: center;
+    gap: -10px;
+    margin-top: 4px;
+  }
+  .opp-hand .card { width: 18px; height: 26px; margin-left: -10px; padding: 0; }
+  .opp-hand .card:first-child { margin-left: 0; }
+  .side-hand { writing-mode: vertical-rl; }
+
+  /* Controls */
+  #controls {
+    text-align: center;
+    margin-top: 8px;
+  }
+  button {
+    background: #ffd76b;
+    color: #000;
+    border: none;
+    border-radius: 6px;
+    padding: 8px 16px;
+    margin: 0 4px;
+    font-size: 14px;
+    cursor: pointer;
+    font-weight: bold;
+  }
+  button:disabled { background: #888; color: #444; cursor: not-allowed; }
+  button.danger { background: #e07b50; }
+  button.secondary { background: #aac; }
+
+  /* Bottom card display */
+  #bottom-area {
+    text-align: center;
+    margin: 6px 0;
+    padding: 6px;
+    background: rgba(0,0,0,0.25);
+    border-radius: 8px;
+    min-height: 28px;
+    font-size: 13px;
+  }
+  #bottom-cards { display: inline-flex; gap: 2px; vertical-align: middle; margin-left: 6px; }
+  #bottom-cards .card { width: 28px; height: 40px; padding: 2px 4px; }
+  #bottom-cards .card .rank { font-size: 10px; }
+  #bottom-cards .card .suit { font-size: 12px; }
+  #bottom-cards .card .center { font-size: 13px; }
+  #bottom-cards .card.joker .center { font-size: 8px; }
+
+  /* Modal */
+  .modal-overlay {
+    position: fixed; inset: 0;
+    background: rgba(0,0,0,0.6);
+    display: flex; align-items: center; justify-content: center;
+    z-index: 100;
+  }
+  .modal {
+    background: #1a4530;
+    border: 2px solid #ffd76b;
+    border-radius: 10px;
+    padding: 20px 28px;
+    max-width: 480px;
+    text-align: center;
+  }
+  .modal h2 { margin-top: 0; color: #ffd76b; }
+  .modal table { width: 100%; margin: 10px 0; border-collapse: collapse; }
+  .modal td { padding: 4px 8px; border-bottom: 1px solid rgba(255,255,255,0.15); }
+  .modal td:first-child { text-align: left; color: #cde; }
+  .modal td:last-child { text-align: right; font-weight: bold; }
+
+  .toast {
+    position: fixed;
+    top: 16px; left: 50%;
+    transform: translateX(-50%);
+    background: rgba(0,0,0,0.8);
+    padding: 8px 18px;
+    border-radius: 18px;
+    font-size: 14px;
+    z-index: 200;
+    pointer-events: none;
+    color: #ffd76b;
+  }
+
+  #lobby {
+    position: fixed; inset: 0;
+    background: rgba(0,20,10,0.92);
+    display: flex; align-items: center; justify-content: center;
+    z-index: 500;
+  }
+  #lobby.hidden { display: none; }
+  .lobby-box {
+    background: #1a4530;
+    border: 2px solid #ffd76b;
+    border-radius: 12px;
+    padding: 28px 36px;
+    max-width: 520px;
+    width: 90%;
+  }
+  .lobby-box h1 { margin: 0 0 8px; color: #ffd76b; text-align: center; }
+  .lobby-box .sub { text-align: center; color: #cde; font-size: 13px; margin-bottom: 18px; }
+  .lobby-box .mode-btns { display: flex; gap: 10px; flex-wrap: wrap; justify-content: center; }
+  .lobby-box .mode-btns button { flex: 1; min-width: 130px; padding: 14px 12px; font-size: 15px; }
+  .lobby-box input {
+    background: #0d2818; color: #fff; border: 1px solid #4a7;
+    padding: 8px 10px; border-radius: 5px; font-size: 14px;
+    margin: 4px; width: calc(100% - 12px);
+  }
+  .lobby-box .form-row { margin: 10px 0; }
+  .lobby-box .form-row label { color: #cde; font-size: 13px; display: block; margin-bottom: 2px; }
+  .lobby-box .room-info {
+    background: #0d2818; border-radius: 6px; padding: 12px;
+    margin: 12px 0; word-break: break-all;
+  }
+  .lobby-box .room-code {
+    font-family: monospace; font-size: 16px; color: #ffd76b;
+    background: #000; padding: 4px 8px; border-radius: 4px; display: inline-block; margin: 4px 0;
+  }
+  .lobby-box .peer-list { font-size: 13px; color: #cde; margin: 8px 0; }
+  .lobby-box .peer-list .item { padding: 3px 0; }
+  .lobby-box .back { background: #aac; }
+
+  .log {
+    max-height: 80px;
+    overflow-y: auto;
+    font-size: 12px;
+    background: rgba(0,0,0,0.25);
+    padding: 6px 10px;
+    border-radius: 6px;
+    margin-top: 6px;
+    color: #cde;
+  }
+  .log div { margin: 2px 0; }
+
+  /* ===== Mobile (≤ 768px) ===== */
+  @media (max-width: 768px) {
+    #game {
+      padding: 4px;
+      gap: 4px;
+    }
+    #status-bar {
+      padding: 6px 8px;
+      font-size: 11px;
+      gap: 8px;
+    }
+    #status-bar .msg { min-width: 100%; order: 99; font-size: 11px; }
+
+    #table {
+      margin: 4px 0;
+      border-radius: 100px / 70px;
+      border-width: 2px;
+      min-height: 360px;
+      padding: 6px;
+    }
+    .seat-name {
+      padding: 2px 8px;
+      font-size: 11px;
+      margin-bottom: 2px;
+    }
+    .played-cards { min-height: 50px; gap: 1px; }
+    .center-info { font-size: 11px; }
+    .center-info .big { font-size: 18px; }
+
+    .card {
+      width: 32px; height: 46px;
+      padding: 2px 3px;
+      border-radius: 3px;
+    }
+    .card .rank { font-size: 11px; }
+    .card .suit { font-size: 12px; }
+    .card .center { font-size: 15px; }
+    .card.joker .center { font-size: 8px; }
+
+    .opp-hand .card { width: 14px; height: 20px; margin-left: -8px; }
+
+    #hand-area {
+      padding: 6px;
+      min-height: 80px;
+    }
+    #hand {
+      gap: 2px;
+      /* phone hand: tighter, allow horizontal overflow with auto-shrink */
+    }
+    #hand .card {
+      width: 36px; height: 52px;
+      padding: 2px 3px;
+    }
+    #hand .card .rank { font-size: 12px; }
+    #hand .card .suit { font-size: 13px; }
+    #hand .card .center { font-size: 17px; }
+    #hand .card.joker .center { font-size: 9px; }
+    /* Overlap many cards horizontally so 25-33 cards fit */
+    #hand { flex-wrap: wrap; row-gap: 4px; }
+    #hand .card { margin-right: -14px; }
+    #hand .card:last-child { margin-right: 0; }
+    #hand .card:hover { transform: translateY(-4px); }
+    #hand .card.selected { transform: translateY(-10px); }
+
+    button {
+      padding: 10px 14px;
+      font-size: 14px;
+      margin: 3px;
+      min-height: 40px;
+    }
+
+    #hint-bar {
+      font-size: 12px;
+      padding: 5px 8px;
+    }
+
+    #bottom-area { font-size: 11px; padding: 4px; }
+    #bottom-cards .card { width: 22px; height: 30px; padding: 1px 2px; }
+    #bottom-cards .card .rank { font-size: 8px; }
+    #bottom-cards .card .suit { font-size: 9px; }
+    #bottom-cards .card .center { font-size: 10px; }
+
+    .log { max-height: 50px; font-size: 11px; padding: 4px 6px; }
+
+    .lobby-box {
+      padding: 16px;
+      width: 94%;
+    }
+    .lobby-box h1 { font-size: 22px; }
+    .lobby-box .mode-btns button { min-width: 100%; }
+    .lobby-box .room-info { font-size: 12px; padding: 8px; }
+    .lobby-box .room-code { font-size: 13px; word-break: break-all; }
+
+    .modal { padding: 14px 18px; max-width: 94%; }
+    .modal h2 { font-size: 18px; }
+    .modal td { font-size: 12px; padding: 3px 4px; }
+
+    .toast { font-size: 12px; padding: 6px 14px; }
+  }
+
+  /* ===== Small phones (≤ 380px) ===== */
+  @media (max-width: 380px) {
+    .card { width: 28px; height: 40px; }
+    #hand .card { width: 32px; height: 46px; margin-right: -16px; }
+    .seat-name { font-size: 10px; padding: 2px 6px; }
+    #table { min-height: 320px; }
+  }
+
+  /* ===== Landscape phone ===== */
+  @media (max-height: 500px) and (orientation: landscape) {
+    #table { min-height: 260px; }
+    #hand-area { min-height: 60px; padding: 4px; }
+    .log { display: none; }
+  }
+</style>
+</head>
+<body>
+<div id="lobby">
+  <div class="lobby-box" id="lobby-main">
+    <h1>🎴 赤峰对调</h1>
+    <div class="sub">4 人 · 2 副牌 · 对家合作</div>
+    <div class="mode-btns">
+      <button onclick="showMode('solo')">🤖 单机 vs AI</button>
+      <button onclick="showMode('host')">🏠 创建房间</button>
+      <button onclick="showMode('join')">🔑 加入房间</button>
+    </div>
+  </div>
+  <div class="lobby-box hidden" id="lobby-host">
+    <h2>创建房间</h2>
+    <div class="form-row">
+      <label>你的昵称</label>
+      <input id="host-name" placeholder="例如：张三" maxlength="10">
+    </div>
+    <div id="host-status"></div>
+    <div class="mode-btns" id="host-buttons">
+      <button onclick="doHost()">开房</button>
+      <button class="back" onclick="showMode('main')">返回</button>
+    </div>
+  </div>
+  <div class="lobby-box hidden" id="lobby-join">
+    <h2>加入房间</h2>
+    <div class="form-row">
+      <label>你的昵称</label>
+      <input id="join-name" placeholder="例如：李四" maxlength="10">
+    </div>
+    <div class="form-row">
+      <label>房间码（房主提供）</label>
+      <input id="join-code" placeholder="粘贴房间码">
+    </div>
+    <div id="join-status"></div>
+    <div class="mode-btns">
+      <button onclick="doJoin()">连接</button>
+      <button class="back" onclick="showMode('main')">返回</button>
+    </div>
+  </div>
+</div>
+
+<div id="game">
+  <div id="status-bar">
+    <div class="item"><span class="label">级牌:</span><span class="val" id="st-level">2</span></div>
+    <div class="item"><span class="label">主花色:</span><span class="val" id="st-trump">-</span></div>
+    <div class="item"><span class="label">庄家:</span><span class="val" id="st-dealer">-</span></div>
+    <div class="item"><span class="label">打方分数:</span><span class="val" id="st-points">0</span></div>
+    <div class="msg" id="st-msg">点击"开始新局"开始游戏</div>
+  </div>
+
+  <div id="table">
+    <div class="seat north" id="seat-2">
+      <div class="seat-name" id="name-2">玩家2 (对家)</div>
+      <div class="opp-hand" id="hand-2"></div>
+      <div class="played-cards" id="played-2"></div>
+    </div>
+    <div class="seat west" id="seat-1">
+      <div class="seat-name" id="name-1">玩家1 (左)</div>
+      <div class="opp-hand side-hand" id="hand-1"></div>
+      <div class="played-cards" id="played-1"></div>
+    </div>
+    <div class="seat east" id="seat-3">
+      <div class="seat-name" id="name-3">玩家3 (右)</div>
+      <div class="opp-hand side-hand" id="hand-3"></div>
+      <div class="played-cards" id="played-3"></div>
+    </div>
+    <div class="seat south" id="seat-0">
+      <div class="played-cards" id="played-0"></div>
+      <div class="seat-name" id="name-0">你 (玩家0)</div>
+    </div>
+    <div class="center-info" id="center-info"></div>
+  </div>
+
+  <div id="bottom-area">
+    <span>底牌:</span><span id="bottom-cards"></span>
+    <span id="bottom-status" style="margin-left: 8px; color: #ffd76b;"></span>
+  </div>
+
+  <div id="hand-area">
+    <div id="hint-bar" class="empty"></div>
+    <div id="hand"></div>
+    <div id="controls"></div>
+    <div class="log" id="log"></div>
+  </div>
+</div>
+
+<script>
+// ===================== Constants =====================
+const SUITS = ['H','D','S','C'];
+const SUIT_SYMBOLS = {H:'♥',D:'♦',S:'♠',C:'♣',J:''};
+const SUIT_NAMES = {H:'红桃',D:'方块',S:'黑桃',C:'梅花'};
+const SUIT_RANK_FOR_COUNTER = {H:4,D:3,S:2,C:1};
+const RANKS = ['2','3','4','5','6','7','8','9','10','J','Q','K','A'];
+let PLAYER_NAMES = ['你','玩家1','玩家2','玩家3'];
+
+// ===================== Network state =====================
+const NET = {
+  mode: 'solo',         // 'solo' | 'host' | 'client'
+  peer: null,
+  roomCode: '',
+  myName: '我',
+  hostConn: null,                              // client only
+  peerConns: { 1: null, 2: null, 3: null },    // host only
+  isHuman: [true, false, false, false],        // host only (by global seat)
+  peerSeatByConnId: {},                        // host only: connectionId -> globalSeat
+};
+
+function isAITurn(globalSeat) {
+  if (NET.mode === 'solo') return globalSeat !== 0;
+  if (NET.mode === 'host') return !NET.isHuman[globalSeat];
+  return false; // client never runs AI
+}
+function isMyTurn(globalSeat) {
+  // In local view, "me" is always seat 0
+  return globalSeat === 0;
+}
+
+// Player 0 (south) and Player 2 (north) are a team.
+// Player 1 (west) and Player 3 (east) are a team.
+function teammate(p) { return (p+2)%4; }
+function team(p) { return p%2; } // 0 = NS team, 1 = EW team
+
+// ===================== Card (plain object for serialization) =====================
+function makeCard(suit, rank, deck=0) {
+  const isJoker = suit === 'J';
+  let points = 0;
+  if (rank === '5') points = 5;
+  else if (rank === '10' || rank === 'K') points = 10;
+  return {
+    suit, rank, deck,
+    id: `${suit}${rank}_${deck}_${Math.random().toString(36).slice(2,7)}`,
+    isJoker,
+    isBigJoker: isJoker && rank === 'BJ',
+    isSmallJoker: isJoker && rank === 'SJ',
+    points,
+  };
+}
+function cardDisplay(c) {
+  if (c.isBigJoker) return '🃏大王';
+  if (c.isSmallJoker) return '🂿小王';
+  return `${SUIT_SYMBOLS[c.suit]}${c.rank}`;
+}
+
+function makeDecks() {
+  const cards = [];
+  for (let d=0; d<2; d++) {
+    for (const s of SUITS) for (const r of RANKS) cards.push(makeCard(s, r, d));
+    cards.push(makeCard('J','SJ',d));
+    cards.push(makeCard('J','BJ',d));
+  }
+  return cards;
+}
+
+function shuffle(arr) {
+  for (let i=arr.length-1; i>0; i--) {
+    const j = Math.floor(Math.random()*(i+1));
+    [arr[i],arr[j]] = [arr[j],arr[i]];
+  }
+  return arr;
+}
+
+// ===================== Game state =====================
+const G = {
+  level: '2',
+  trumpSuit: null,    // 'H','D','S','C', or null = no-trump (all jokers + level rank are trump)
+  declarer: -1,       // player who declared trump
+  dealer: -1,         // dealer = last declarer
+  hands: [[],[],[],[]],
+  bottom: [],
+  bottomCollected: false,
+  ganbaguo: false,    // 干巴锅
+  current: 0,         // current player to act
+  trickLead: -1,
+  trickPlays: [],     // [{player, cards}]
+  pointsByTeam: [0,0],
+  tricksWon: [[],[],[],[]], // cards captured by each player
+  trickCount: 0,
+  phase: 'idle',      // idle | dealing | declare | bottom | play | over
+  lastTrickWinner: -1,
+};
+
+// ===================== Helpers =====================
+function isTrump(c) {
+  if (c.isJoker) return true;
+  if (c.rank === G.level) return true;
+  if (G.trumpSuit && c.suit === G.trumpSuit) return true;
+  return false;
+}
+function effectiveSuit(c) {
+  if (isTrump(c)) return 'T';
+  return c.suit;
+}
+function cardStrength(c) {
+  if (c.isBigJoker) return 1000;
+  if (c.isSmallJoker) return 990;
+  if (c.rank === G.level) {
+    if (c.suit === G.trumpSuit) return 980;
+    return 970;
+  }
+  const idx = RANKS.indexOf(c.rank);
+  if (G.trumpSuit && c.suit === G.trumpSuit) return 500 + idx;
+  return 100 + idx;
+}
+function sortHand(hand) {
+  hand.sort((a,b) => {
+    const ta = isTrump(a), tb = isTrump(b);
+    if (ta !== tb) return ta ? 1 : -1; // non-trump first
+    if (!ta && a.suit !== b.suit) return a.suit.localeCompare(b.suit);
+    return cardStrength(a) - cardStrength(b);
+  });
+}
+
+// ===================== Rendering =====================
+function cardHTML(c, opts={}) {
+  const cls = ['card'];
+  if (c.isJoker) {
+    cls.push('joker');
+    if (c.isSmallJoker) cls.push('small');
+    if (opts.selected) cls.push('selected');
+    return `<div class="${cls.join(' ')}" data-id="${c.id}"><div class="center">${c.isBigJoker?'大王':'小王'}</div></div>`;
+  }
+  const red = c.suit === 'H' || c.suit === 'D';
+  if (red) cls.push('red');
+  if (opts.selected) cls.push('selected');
+  if (opts.showTrump && isTrump(c) && !c.isJoker && c.rank !== G.level) cls.push('trump-mark');
+  return `<div class="${cls.join(' ')}" data-id="${c.id}"><span class="rank">${c.rank}</span><span class="suit">${SUIT_SYMBOLS[c.suit]}</span><div class="center">${SUIT_SYMBOLS[c.suit]}</div></div>`;
+}
+function backHTML() { return `<div class="card back"></div>`; }
+
+const selected = new Set();
+
+function computeHint() {
+  if (G.phase !== 'play' || G.current !== 0) return null;
+  if (G.trickPlays.length === 0) {
+    return { text: '🎯 你领出。可出单张或对子（主牌不能甩）。', mustIds: null, dimIds: null };
+  }
+  const lead = G.trickPlays[0];
+  const leadType = detectPlayType(lead.cards);
+  const leadSuit = effectiveSuit(lead.cards[0]);
+  const suitName = suitDisplay(leadSuit);
+  const leadDisplay = lead.cards.map(c=>cardDisplay(c)).join(' ');
+  const myOfSuit = G.hands[0].filter(c => effectiveSuit(c) === leadSuit);
+  const dimIds = new Set();
+
+  if (leadType === 'single') {
+    if (myOfSuit.length > 0) {
+      // dim everything not of suit
+      G.hands[0].forEach(c => { if (effectiveSuit(c) !== leadSuit) dimIds.add(c.id); });
+      return {
+        text: `🎯 ${PLAYER_NAMES[lead.player]} 领出 ${leadDisplay}（单张${suitName}）。你必须跟 1 张 ${suitName}（高亮的牌）。`,
+        mustIds: new Set(myOfSuit.map(c=>c.id)),
+        dimIds,
+      };
+    }
+    return {
+      text: `🎯 ${PLAYER_NAMES[lead.player]} 领出 ${leadDisplay}（单张${suitName}）。你无 ${suitName}，可垫任意 1 张；出主牌可吃。`,
+      mustIds: null, dimIds: null,
+    };
+  }
+  // pair
+  const pairsOfSuit = findAllPairs(myOfSuit);
+  if (pairsOfSuit.length > 0) {
+    // must play a pair of leadSuit; highlight cards that form such pairs
+    const pairIds = new Set();
+    pairsOfSuit.forEach(pr => pr.forEach(c => pairIds.add(c.id)));
+    G.hands[0].forEach(c => { if (!pairIds.has(c.id)) dimIds.add(c.id); });
+    return {
+      text: `🎯 ${PLAYER_NAMES[lead.player]} 领出 ${leadDisplay}（${suitName}对子）。你有 ${suitName} 对子，必须出 ${suitName} 对子。`,
+      mustIds: pairIds, dimIds,
+    };
+  }
+  if (myOfSuit.length >= 2) {
+    G.hands[0].forEach(c => { if (effectiveSuit(c) !== leadSuit) dimIds.add(c.id); });
+    return {
+      text: `🎯 ${PLAYER_NAMES[lead.player]} 领出 ${leadDisplay}（${suitName}对子）。你无 ${suitName} 对子，必须出 2 张 ${suitName}（高亮）。`,
+      mustIds: new Set(myOfSuit.map(c=>c.id)),
+      dimIds,
+    };
+  }
+  if (myOfSuit.length === 1) {
+    const must = new Set([myOfSuit[0].id]);
+    return {
+      text: `🎯 ${PLAYER_NAMES[lead.player]} 领出 ${leadDisplay}（${suitName}对子）。你只有 1 张 ${suitName}，必须出它 + 任意 1 张。`,
+      mustIds: must, dimIds: null,
+    };
+  }
+  return {
+    text: `🎯 ${PLAYER_NAMES[lead.player]} 领出 ${leadDisplay}（${suitName}对子）。你无 ${suitName}，可垫任意 2 张；出主牌对子可吃。`,
+    mustIds: null, dimIds: null,
+  };
+}
+
+function renderHand() {
+  const handDiv = document.getElementById('hand');
+  sortHand(G.hands[0]);
+  const hint = computeHint();
+  handDiv.innerHTML = G.hands[0].map(c => {
+    const extra = [];
+    if (hint && hint.mustIds && hint.mustIds.has(c.id)) extra.push('must');
+    if (hint && hint.dimIds && hint.dimIds.has(c.id)) extra.push('dim');
+    let html = cardHTML(c, {selected: selected.has(c.id), showTrump: true});
+    if (extra.length > 0) {
+      html = html.replace('class="card', `class="card ${extra.join(' ')}`);
+    }
+    return html;
+  }).join('');
+  handDiv.querySelectorAll('.card').forEach(el => {
+    el.addEventListener('click', () => {
+      const id = el.dataset.id;
+      if (selected.has(id)) selected.delete(id); else selected.add(id);
+      renderHand();
+      renderControls();
+    });
+  });
+  // Hint bar
+  const bar = document.getElementById('hint-bar');
+  if (hint) {
+    bar.classList.remove('empty');
+    bar.textContent = hint.text;
+  } else {
+    bar.classList.add('empty');
+    bar.textContent = '';
+  }
+}
+
+function renderOpponents() {
+  for (let p=1; p<=3; p++) {
+    const div = document.getElementById('hand-'+p);
+    const n = G.hands[p].length;
+    div.innerHTML = Array(Math.min(n,12)).fill(0).map(_=>backHTML()).join('') + (n>12?`<span style="margin-left:6px;font-size:11px;">×${n}</span>`:'');
+  }
+}
+
+function renderPlayed() {
+  for (let p=0; p<4; p++) {
+    const div = document.getElementById('played-'+p);
+    const play = G.trickPlays.find(pl => pl.player === p);
+    if (play) {
+      div.innerHTML = play.cards.map(c => cardHTML(c, {showTrump:true})).join('');
+    } else {
+      div.innerHTML = '';
+    }
+  }
+}
+
+function renderStatus(msg) {
+  document.getElementById('st-level').textContent = G.level;
+  document.getElementById('st-trump').textContent = G.trumpSuit ? (SUIT_SYMBOLS[G.trumpSuit]+SUIT_NAMES[G.trumpSuit]) : (G.declarer>=0?'无主':'-');
+  document.getElementById('st-dealer').textContent = G.dealer>=0 ? PLAYER_NAMES[G.dealer] : '-';
+  document.getElementById('st-points').textContent = G.pointsByTeam[1-team(G.dealer)] || 0; // attacker team points
+  if (msg !== undefined) document.getElementById('st-msg').textContent = msg;
+
+  for (let p=0; p<4; p++) {
+    const nm = document.getElementById('name-'+p);
+    nm.className = 'seat-name';
+    if (p === G.dealer) nm.classList.add('dealer');
+    else if (p === G.declarer) nm.classList.add('declarer');
+    if (p === G.current && G.phase === 'play') nm.classList.add('current');
+  }
+}
+
+function renderBottom() {
+  const div = document.getElementById('bottom-cards');
+  const stat = document.getElementById('bottom-status');
+  if (G.bottom.length === 0) { div.innerHTML = '(无)'; stat.textContent=''; return; }
+  // After dealer picks bottom, before play: hidden until exchange done
+  if (G.phase === 'play' || G.phase === 'over' || G.bottomCollected) {
+    div.innerHTML = G.bottom.map(c => cardHTML(c, {showTrump:true})).join('');
+    stat.textContent = G.ganbaguo ? '【干巴锅·不可拣】' : '';
+  } else {
+    div.innerHTML = G.bottom.map(_=>backHTML()).join('');
+    stat.textContent = '';
+  }
+}
+
+function log(msg) {
+  const div = document.getElementById('log');
+  div.innerHTML += `<div>${msg}</div>`;
+  div.scrollTop = div.scrollHeight;
+}
+
+function toast(msg, ms=1400) {
+  const t = document.createElement('div');
+  t.className = 'toast';
+  t.textContent = msg;
+  document.body.appendChild(t);
+  setTimeout(() => t.remove(), ms);
+}
+
+function renderControls() {
+  const div = document.getElementById('controls');
+  div.innerHTML = '';
+  if (G.phase === 'idle' || G.phase === 'over') {
+    if (NET.mode === 'client') {
+      const info = document.createElement('span');
+      info.style.fontSize = '13px';
+      info.style.color = '#cde';
+      info.textContent = G.phase === 'over' ? '本局结束，等待房主开下一局...' : '等待房主开始游戏...';
+      div.appendChild(info);
+      return;
+    }
+    const b = document.createElement('button');
+    b.textContent = G.phase==='over' ? '再来一局' : '开始新局';
+    b.onclick = startGame;
+    div.appendChild(b);
+    const lobbyBtn = document.createElement('button');
+    lobbyBtn.textContent = '回到大厅';
+    lobbyBtn.className = 'secondary';
+    lobbyBtn.onclick = () => {
+      if (NET.peer) NET.peer.destroy();
+      NET.peer = null;
+      NET.peerConns = {1:null,2:null,3:null};
+      NET.mode = 'solo';
+      showMode('main');
+      showLobby();
+    };
+    div.appendChild(lobbyBtn);
+    return;
+  }
+  if (G.phase === 'declare') {
+    if (G.declareTurn !== 0) {
+      const info = document.createElement('span');
+      info.style.fontSize = '13px';
+      info.style.color = '#cde';
+      info.textContent = `等待 ${PLAYER_NAMES[G.declareTurn]} 决定...`;
+      div.appendChild(info);
+      return;
+    }
+    const counts = findLevelCounts(G.hands[0], G.level);
+    const cur = currentDeclareStrength();
+    const options = [];
+    for (const [suit, n] of Object.entries(counts)) {
+      if (n >= 1 && declareStrength(suit, false) > cur) options.push({suit, isPair: false});
+      if (n >= 2 && declareStrength(suit, true) > cur) options.push({suit, isPair: true});
+    }
+    if (options.length === 0) {
+      const info = document.createElement('span');
+      info.style.marginRight = '8px';
+      info.style.fontSize = '13px';
+      info.style.color = '#cde';
+      if (Object.keys(counts).length === 0) {
+        info.textContent = `你手中无 ${G.level}（级牌），无法亮主。`;
+      } else if (cur >= 0) {
+        info.textContent = `当前已亮：${SUIT_NAMES[G.trumpSuit]}${G.level}${G.declareIsPair?'对子':'单张'}，你的牌不足以反。`;
+      } else {
+        info.textContent = `你手中无 ${G.level}（级牌），无法亮主。`;
+      }
+      div.appendChild(info);
+    } else {
+      for (const opt of options) {
+        const b = document.createElement('button');
+        b.textContent = `亮${opt.isPair?'对子':'单张'} ${SUIT_SYMBOLS[opt.suit]}${G.level}`;
+        b.onclick = () => humanDeclare(opt.suit, opt.isPair);
+        div.appendChild(b);
+      }
+    }
+    const pass = document.createElement('button');
+    pass.textContent = '不亮';
+    pass.className = 'secondary';
+    pass.onclick = humanPassDeclare;
+    div.appendChild(pass);
+    return;
+  }
+  if (G.phase === 'bottom' && G.dealer === 0) {
+    const info = document.createElement('span');
+    info.style.marginRight = '8px';
+    info.textContent = `选 8 张扣底（已选 ${selected.size}/8）`;
+    div.appendChild(info);
+    const b = document.createElement('button');
+    b.textContent = '确认扣底';
+    b.disabled = selected.size !== 8;
+    b.onclick = humanConfirmBottom;
+    div.appendChild(b);
+    return;
+  }
+  if (G.phase === 'play' && G.current === 0) {
+    const b = document.createElement('button');
+    b.textContent = '出牌';
+    b.disabled = selected.size === 0;
+    b.onclick = humanPlay;
+    div.appendChild(b);
+    const auto = document.createElement('button');
+    auto.textContent = '自动选最小';
+    auto.className = 'secondary';
+    auto.onclick = () => {
+      selected.clear();
+      const sug = aiFollow.length > 0 && G.trickPlays.length > 0 ? aiFollow(0) : aiLead(0);
+      sug.forEach(c => selected.add(c.id));
+      renderHand();
+    };
+    div.appendChild(auto);
+    const c = document.createElement('button');
+    c.textContent = '清除选择';
+    c.className = 'secondary';
+    c.onclick = () => { selected.clear(); renderHand(); };
+    div.appendChild(c);
+    return;
+  }
+}
+
+function renderCenter() {
+  const div = document.getElementById('center-info');
+  if (G.phase === 'play') {
+    div.innerHTML = `第 ${G.trickCount+1}/25 墩<br>当前 <span class="big">${PLAYER_NAMES[G.current]}</span> 出牌`;
+  } else if (G.phase === 'declare') {
+    div.innerHTML = '亮主阶段';
+  } else if (G.phase === 'bottom') {
+    div.innerHTML = G.dealer===0 ? '请你扣底' : `${PLAYER_NAMES[G.dealer]} 正在扣底`;
+  } else {
+    div.innerHTML = '';
+  }
+}
+
+function renderAll(msg) {
+  renderHand();
+  renderOpponents();
+  renderPlayed();
+  renderBottom();
+  renderStatus(msg);
+  renderControls();
+  renderCenter();
+}
+
+// ===================== Pair detection =====================
+function findPairsOfRank(hand, rank) {
+  const bySuit = {};
+  for (const c of hand) {
+    if (c.rank === rank && c.suit !== 'J') {
+      bySuit[c.suit] = (bySuit[c.suit]||0)+1;
+    }
+  }
+  return Object.entries(bySuit).filter(([_,n]) => n>=2).map(([s])=>s);
+}
+function findLevelCounts(hand, rank) {
+  const bySuit = {};
+  for (const c of hand) {
+    if (c.rank === rank && c.suit !== 'J') {
+      bySuit[c.suit] = (bySuit[c.suit]||0)+1;
+    }
+  }
+  return bySuit;
+}
+function declareStrength(suit, isPair) {
+  return (isPair ? 100 : 0) + SUIT_RANK_FOR_COUNTER[suit];
+}
+function currentDeclareStrength() {
+  if (G.declarer < 0 || !G.trumpSuit) return -1;
+  return (G.declareIsPair ? 100 : 0) + SUIT_RANK_FOR_COUNTER[G.trumpSuit];
+}
+function findPair(hand, suit, rank) {
+  const matches = hand.filter(c => c.suit===suit && c.rank===rank);
+  return matches.length >= 2 ? matches.slice(0,2) : null;
+}
+function findAllPairs(hand) {
+  // Returns groups of 2 identical (suit+rank) cards
+  const m = new Map();
+  for (const c of hand) {
+    const k = c.suit + c.rank;
+    if (!m.has(k)) m.set(k, []);
+    m.get(k).push(c);
+  }
+  const pairs = [];
+  for (const arr of m.values()) {
+    if (arr.length >= 2) pairs.push([arr[0], arr[1]]);
+  }
+  return pairs;
+}
+
+// ===================== Game flow =====================
+function startGame() {
+  // reset
+  Object.assign(G, {
+    level: G.level || '2',
+    trumpSuit: null,
+    declarer: -1,
+    dealer: -1,
+    hands: [[],[],[],[]],
+    bottom: [],
+    bottomCollected: false,
+    ganbaguo: false,
+    current: 0,
+    trickLead: -1,
+    trickPlays: [],
+    pointsByTeam: [0,0],
+    tricksWon: [[],[],[],[]],
+    trickCount: 0,
+    phase: 'dealing',
+    lastTrickWinner: -1,
+    declareIsPair: false,
+  });
+  selected.clear();
+  document.getElementById('log').innerHTML = '';
+  log('🎴 新局开始，级牌 '+G.level);
+
+  // Deal: 100 dealt, 8 bottom
+  const deck = shuffle(makeDecks());
+  G.bottom = deck.slice(0, 8);
+  for (let i=0; i<100; i++) {
+    G.hands[i%4].push(deck[8+i]);
+  }
+  G.phase = 'declare';
+  renderAll('亮主阶段：选择亮主或不亮');
+
+  // AI declare logic: each player decides to declare. We go in order, allow override.
+  // For simplicity: human chooses first (UI), then each AI decides whether to override.
+  // To keep it interactive, prompt human first; AI decides after.
+  // Actually: declare order matters. We'll do: P0 first, then P1, P2, P3 — each can declare or pass.
+  G.declareTurn = 0;
+  declarePhase();
+}
+
+function declarePhase() {
+  if (G.declareTurn >= 4) {
+    // resolve dealer
+    if (G.declarer < 0) {
+      // Random trump suit (no-one declared)
+      G.trumpSuit = SUITS[Math.floor(Math.random()*4)];
+      G.dealer = Math.floor(Math.random()*4);
+      G.declarer = G.dealer;
+      log(`🎲 无人亮主，随机主花色 ${SUIT_NAMES[G.trumpSuit]}，庄家随机为 ${PLAYER_NAMES[G.dealer]}`);
+    } else {
+      G.dealer = G.declarer;
+      log(`👑 庄家：${PLAYER_NAMES[G.dealer]}（${SUIT_NAMES[G.trumpSuit]} ${G.level}）`);
+    }
+    bottomPhase();
+    return;
+  }
+  const p = G.declareTurn;
+  if (isAITurn(p)) {
+    renderAll();
+    setTimeout(() => aiDecideDeclare(p), 600);
+  } else {
+    renderAll(p === 0 ? '请选择亮主' : `等待 ${PLAYER_NAMES[p]} 亮主`);
+  }
+}
+
+function aiDecideDeclare(p) {
+  const counts = findLevelCounts(G.hands[p], G.level);
+  const cur = currentDeclareStrength();
+  let best = null;
+  let bestScore = -1;
+  for (const [suit, n] of Object.entries(counts)) {
+    const support = G.hands[p].filter(c => c.suit === suit).length + G.hands[p].filter(c=>c.isJoker).length*1.5;
+    if (n >= 1 && declareStrength(suit, false) > cur) {
+      const score = support + SUIT_RANK_FOR_COUNTER[suit] * 0.2;
+      if (score > bestScore) { bestScore = score; best = {suit, isPair: false}; }
+    }
+    if (n >= 2 && declareStrength(suit, true) > cur) {
+      const score = support + SUIT_RANK_FOR_COUNTER[suit] * 0.2 + 3;
+      if (score > bestScore) { bestScore = score; best = {suit, isPair: true}; }
+    }
+  }
+  if (!best) {
+    log(`${PLAYER_NAMES[p]}：不亮`);
+    G.declareTurn++;
+    declarePhase();
+    return;
+  }
+  let threshold = 5;
+  if (G.declarer >= 0 && team(G.declarer) === team(p)) threshold = 9;
+  if (bestScore < threshold) {
+    log(`${PLAYER_NAMES[p]}：不亮`);
+    G.declareTurn++;
+    declarePhase();
+    return;
+  }
+  G.trumpSuit = best.suit;
+  G.declarer = p;
+  G.declareIsPair = best.isPair;
+  log(`✨ ${PLAYER_NAMES[p]} 亮${best.isPair?'对子':'单张'}：${SUIT_NAMES[best.suit]} ${G.level}`);
+  toast(`${PLAYER_NAMES[p]} 亮 ${SUIT_NAMES[best.suit]}${best.isPair?'对':''}`);
+  G.declareTurn++;
+  setTimeout(() => declarePhase(), 300);
+}
+
+function performDeclare(player, suit, isPair) {
+  G.trumpSuit = suit;
+  G.declarer = player;
+  G.declareIsPair = !!isPair;
+  log(`✨ ${PLAYER_NAMES[player]}亮${isPair?'对子':'单张'}：${SUIT_NAMES[suit]} ${G.level}`);
+  G.declareTurn++;
+  declarePhase();
+}
+function performPassDeclare(player) {
+  log(`${PLAYER_NAMES[player]}：不亮`);
+  G.declareTurn++;
+  declarePhase();
+}
+
+function humanDeclare(suit, isPair) {
+  if (NET.mode === 'client') {
+    NET.hostConn.send({type:'action', action:'declare', suit, isPair});
+    return;
+  }
+  performDeclare(0, suit, isPair);
+}
+function humanPassDeclare() {
+  if (NET.mode === 'client') {
+    NET.hostConn.send({type:'action', action:'pass'});
+    return;
+  }
+  performPassDeclare(0);
+}
+
+function bottomPhase() {
+  G.phase = 'bottom';
+  // Add bottom to dealer's hand
+  G.hands[G.dealer].push(...G.bottom);
+  G.bottom = [];
+  G.bottomCollected = false;
+  renderAll(`${PLAYER_NAMES[G.dealer]} 拿起底牌，准备扣底`);
+  log(`${PLAYER_NAMES[G.dealer]} 收起底牌（25+8=${G.hands[G.dealer].length} 张）`);
+
+  if (isAITurn(G.dealer)) {
+    setTimeout(() => aiBottom(), 800);
+  } else if (G.dealer === 0) {
+    selected.clear();
+    renderAll('请选择 8 张牌扣底');
+  } else {
+    renderAll(`等待 ${PLAYER_NAMES[G.dealer]} 扣底`);
+  }
+}
+
+function aiBottom() {
+  const hand = G.hands[G.dealer];
+  sortHand(hand);
+  // Strategy: discard low-value non-trump cards.
+  // Prefer to keep trump cards, A's, K's. Discard low off-suit cards.
+  // Avoid discarding all of a non-trump suit to make us "void" - actually that's GOOD for trumping later, but for now just dump lowest.
+  const scored = hand.map(c => {
+    let score = 0;
+    if (isTrump(c)) score += 50;
+    if (c.rank === 'A') score += 30;
+    if (c.rank === 'K') score += 18;
+    if (c.rank === 'Q') score += 10;
+    score += cardStrength(c) * 0.01;
+    if (c.points > 0 && !isTrump(c)) score -= 5; // points in non-trump are dangerous to keep? Actually NO - if dealer wants to keep them safe in trump, but for non-trump we discard.
+    return {c, score};
+  });
+  scored.sort((a,b)=>a.score-b.score);
+  const discards = scored.slice(0,8).map(x=>x.c);
+  finalizeBottom(discards);
+}
+
+function humanConfirmBottom() {
+  if (selected.size !== 8) return;
+  const discards = G.hands[0].filter(c => selected.has(c.id));
+  if (NET.mode === 'client') {
+    NET.hostConn.send({type:'action', action:'bottom', cardIds: discards.map(c=>c.id)});
+    selected.clear();
+    return;
+  }
+  selected.clear();
+  finalizeBottom(discards);
+}
+
+function finalizeBottom(discards) {
+  G.bottom = discards.slice();
+  G.hands[G.dealer] = G.hands[G.dealer].filter(c => !discards.includes(c));
+  G.bottomCollected = true;
+  // Check 干巴锅: bottom has no trump-suit cards except level rank
+  G.ganbaguo = !G.bottom.some(c => {
+    if (c.isJoker) return true;
+    if (c.suit === G.trumpSuit && c.rank !== G.level) return true;
+    return false;
+  });
+  log(`${PLAYER_NAMES[G.dealer]} 扣底完成` + (G.ganbaguo ? '（干巴锅）' : ''));
+  G.phase = 'play';
+  G.current = G.dealer; // dealer leads first trick
+  G.trickLead = G.dealer;
+  G.trickPlays = [];
+  G.trickCount = 0;
+  renderAll(`开始出牌，${PLAYER_NAMES[G.current]} 先手`);
+  nextStep();
+}
+
+function nextStep() {
+  if (G.phase !== 'play') return;
+  if (isAITurn(G.current)) {
+    renderAll(`${PLAYER_NAMES[G.current]} 思考中...`);
+    setTimeout(() => aiPlay(G.current), 700);
+    return;
+  }
+  if (G.current === 0) {
+    selected.clear();
+    renderAll(`轮到你出牌（第 ${G.trickCount+1}/25 墩）`);
+  } else {
+    renderAll(`等待 ${PLAYER_NAMES[G.current]} 出牌（第 ${G.trickCount+1}/25 墩）`);
+  }
+}
+
+// ===================== Following rules =====================
+function detectPlayType(cards) {
+  if (cards.length === 1) return 'single';
+  if (cards.length === 2) {
+    if (cards[0].suit === cards[1].suit && cards[0].rank === cards[1].rank) return 'pair';
+    return 'invalid';
+  }
+  return 'invalid';
+}
+// Validate human play in current trick context
+function validatePlay(player, cards) {
+  if (cards.length === 0) return '请选牌';
+  if (G.trickPlays.length === 0) {
+    // Lead: must be single or pair
+    const t = detectPlayType(cards);
+    if (t === 'invalid') return '只支持出单张或对子';
+    // Trump pair allowed; 主牌不能甩 — only single/pair
+    return null;
+  } else {
+    const lead = G.trickPlays[0].cards;
+    const leadType = detectPlayType(lead);
+    if (cards.length !== lead.length) return `必须出 ${lead.length} 张`;
+    const t = detectPlayType(cards);
+    // Following type — if lead is pair, follower must play pair if possible (of lead suit)
+    const leadSuit = effectiveSuit(lead[0]);
+    const myCardsOfSuit = G.hands[player].filter(c => effectiveSuit(c) === leadSuit);
+
+    if (leadType === 'single') {
+      // Must play card of lead suit if have any
+      if (myCardsOfSuit.length > 0) {
+        if (effectiveSuit(cards[0]) !== leadSuit) return `必须跟 ${suitDisplay(leadSuit)}`;
+      }
+      return null;
+    }
+    // Lead is pair
+    const pairsOfSuit = findAllPairs(myCardsOfSuit);
+    if (pairsOfSuit.length > 0) {
+      // Must play pair of lead suit
+      if (t !== 'pair' || effectiveSuit(cards[0]) !== leadSuit) return `必须出 ${suitDisplay(leadSuit)} 的对子`;
+      return null;
+    }
+    // No pair but have suit cards: must play singles of suit (all from suit)
+    if (myCardsOfSuit.length >= 2) {
+      if (cards.every(c => effectiveSuit(c) === leadSuit)) return null;
+      return `必须用 ${suitDisplay(leadSuit)} 跟`;
+    }
+    if (myCardsOfSuit.length === 1) {
+      // Must include the one suit card
+      if (cards.some(c => effectiveSuit(c) === leadSuit)) return null;
+      return `必须出仅有的那张 ${suitDisplay(leadSuit)}`;
+    }
+    // No suit at all: free to play anything (including trump to win, or pair to win)
+    return null;
+  }
+}
+function suitDisplay(s) {
+  if (s === 'T') return '主牌';
+  return SUIT_NAMES[s];
+}
+
+// Strength of a play (assumes same type as lead and same suit, or trump)
+function playStrength(cards) {
+  return Math.max(...cards.map(cardStrength));
+}
+
+function humanPlay() {
+  const cards = G.hands[0].filter(c => selected.has(c.id));
+  const err = validatePlay(0, cards);
+  if (err) { toast(err); return; }
+  if (NET.mode === 'client') {
+    NET.hostConn.send({type:'action', action:'play', cardIds: cards.map(c=>c.id)});
+    selected.clear();
+    return;
+  }
+  submitPlay(0, cards);
+}
+
+function submitPlay(player, cards) {
+  // Remove from hand
+  G.hands[player] = G.hands[player].filter(c => !cards.includes(c));
+  G.trickPlays.push({player, cards});
+  selected.clear();
+  log(`${PLAYER_NAMES[player]} 出 ${cards.map(c=>cardDisplay(c)).join(' ')}`);
+  renderAll();
+
+  if (G.trickPlays.length === 4) {
+    setTimeout(resolveTrick, 1200);
+  } else {
+    G.current = (G.current + 1) % 4;
+    nextStep();
+  }
+}
+
+function resolveTrick() {
+  // Determine winner
+  const lead = G.trickPlays[0];
+  const leadType = detectPlayType(lead.cards);
+  const leadSuit = effectiveSuit(lead.cards[0]);
+  let winner = lead;
+  let winnerStr = playStrength(lead.cards);
+  for (let i=1; i<G.trickPlays.length; i++) {
+    const p = G.trickPlays[i];
+    const pType = detectPlayType(p.cards);
+    if (pType !== leadType) continue; // mismatched type can't beat
+    const pSuit = effectiveSuit(p.cards[0]);
+    // pair of trump can beat pair of non-trump
+    if (pSuit === leadSuit || (pSuit === 'T' && leadSuit !== 'T')) {
+      // but must be all same suit/trump - effectiveSuit of all cards in p should match
+      if (!p.cards.every(c => effectiveSuit(c) === pSuit)) continue;
+      const wSuit = effectiveSuit(winner.cards[0]);
+      const pStr = playStrength(p.cards);
+      if (pSuit === wSuit) {
+        if (pStr > winnerStr) { winner = p; winnerStr = pStr; }
+      } else if (pSuit === 'T' && wSuit !== 'T') {
+        winner = p; winnerStr = pStr;
+      }
+    }
+  }
+
+  // Collect points
+  const points = G.trickPlays.reduce((s,p) => s + p.cards.reduce((a,c)=>a+c.points,0), 0);
+  G.tricksWon[winner.player].push(...G.trickPlays.flatMap(p=>p.cards));
+  // Points go to attacking team only (打方 = non-dealer team) — record per team
+  if (team(winner.player) !== team(G.dealer)) {
+    G.pointsByTeam[team(winner.player)] += points;
+    if (points > 0) log(`👉 ${PLAYER_NAMES[winner.player]} 赢得本墩 +${points} 分`);
+    else log(`👉 ${PLAYER_NAMES[winner.player]} 赢得本墩`);
+  } else {
+    log(`👉 ${PLAYER_NAMES[winner.player]} 赢得本墩（守方收回 ${points} 分）`);
+  }
+  G.lastTrickWinner = winner.player;
+  G.trickCount++;
+  G.trickPlays = [];
+  G.current = winner.player;
+  G.trickLead = winner.player;
+
+  renderAll();
+
+  if (G.trickCount >= 25) {
+    setTimeout(endRound, 1000);
+  } else {
+    setTimeout(() => {
+      // clear played
+      G.trickPlays = [];
+      renderPlayed();
+      nextStep();
+    }, 500);
+  }
+}
+
+function endRound() {
+  G.phase = 'over';
+  // Bottom card bonus: last trick winner is on attacker side? Bottom goes to last trick winner's team if attackers, doubled
+  // Per rules: 闲家（守方）最后如果使用大王、小王、Q、K 抠底成功
+  // Re-read: 抠底 is when defenders (守方 = dealer team here actually... let me re-check)
+  // Per rules: "闲家（守方）最后如果使用大王、小王、Q、K抠底成功"
+  // 闲家 typically = non-dealer = attackers (打方). But rule says 闲家=守方 here. Chifeng rules naming is opposite.
+  // We've been using: dealer team = 守方; non-dealer team = 闲家=打方. Bottom is captured by last trick winner.
+  // If last trick winner is attacker (打方=非庄家方), they take bottom points (doubled in standard rules).
+  // If dealer team wins last trick, bottom stays with them.
+  // 抠底 bonus: if attackers (打方) win last trick with K/Q/Joker, get extra level bonus per the table.
+  const lastP = G.lastTrickWinner;
+  const lastTrickCards = G.tricksWon[lastP].slice(-G.trickPlays.length || -4); // approximate (we already cleared trickPlays)
+  // Better: store last trick cards
+  // We didn't store separately; reconstruct from tricksWon last 4 entries:
+  const won = G.tricksWon[lastP];
+  const lastTrick = won.slice(-4); // assumes singles last trick
+  const lastPlayBy = lastTrick.slice(0,1); // we can't know exactly; use winner's contribution
+  // For simplicity: detect 抠底 by checking if last trick winner played K/Q/Joker as winning card
+  // We'll just check max-strength card among lastTrick cards
+
+  const attackerTeam = 1 - team(G.dealer);
+  let bottomPoints = G.bottom.reduce((s,c)=>s+c.points,0);
+  // Bottom doubled
+  bottomPoints *= 2;
+  let kouDiBonus = 0;
+  let kouDiMsg = '';
+  if (team(lastP) === attackerTeam) {
+    G.pointsByTeam[attackerTeam] += bottomPoints;
+    // Detect 抠底 — check if winning card type
+    // Find what the winner played in last trick: it's whoever's cards contain the highest strength
+    // Use approximation: pick winner's last cards from tricksWon — last cards added are the 4 cards of last trick
+    const lastAll = G.tricksWon[lastP].slice(-4); // includes other players' cards too
+    // We need only winner's own cards. Let's track separately. Quick patch:
+    // We'll use highest-strength card in lastAll that belongs to a trump or matches the lead.
+    // Simpler: kouDi bonus = check if any K/Q/Joker is in lastAll and last winner is attacker
+    const hasBig = lastAll.some(c => c.isBigJoker);
+    const hasSmall = lastAll.some(c => c.isSmallJoker);
+    const hasK = lastAll.some(c => c.rank === 'K');
+    const hasQ = lastAll.some(c => c.rank === 'Q');
+    if (hasBig) { kouDiBonus = 3; kouDiMsg = '大王抠底 +3'; }
+    else if (hasSmall) { kouDiBonus = 2; kouDiMsg = '小王抠底 +2'; }
+    else if (hasK) { kouDiBonus = 3; kouDiMsg = 'K 翻天 +3'; }
+    else if (hasQ) { kouDiBonus = 6; kouDiMsg = 'Q 半截 +6'; }
+  }
+
+  // 涨包 bonus from jokers in bottom (skipped — would need 涨包 phase)
+  // Per rules: bottom jokers give bonus to winner. We'll apply it.
+  let zhangBaoBonus = 0;
+  const bigInBottom = G.bottom.filter(c=>c.isBigJoker).length;
+  const smallInBottom = G.bottom.filter(c=>c.isSmallJoker).length;
+  zhangBaoBonus = bigInBottom*3 + smallInBottom*2;
+
+  const attackPoints = G.pointsByTeam[attackerTeam];
+  let attackerLevelChange = 0;
+  let defenderLevelChange = 0;
+  let descript = '';
+  if (attackPoints === 0) { defenderLevelChange = -3; attackerLevelChange = 3; descript = '0 分'; }
+  else if (attackPoints < 40) { defenderLevelChange = -2; attackerLevelChange = 2; descript = '0~40 分'; }
+  else if (attackPoints < 80) { defenderLevelChange = -1; attackerLevelChange = 1; descript = '40~80 分'; }
+  else if (attackPoints < 140) { defenderLevelChange = 1; attackerLevelChange = -1; descript = '80~140 分'; }
+  else { defenderLevelChange = -99; attackerLevelChange = Math.max(1, Math.floor(attackPoints/40)); descript = '140+ 分（守方降到 A 级）'; }
+
+  // 抠底 bonus goes to attackers
+  if (kouDiBonus > 0) { attackerLevelChange += kouDiBonus; defenderLevelChange -= kouDiBonus; }
+  // 涨包 bonus to winning team
+  const winningTeam = attackerLevelChange > defenderLevelChange ? attackerTeam : team(G.dealer);
+  if (zhangBaoBonus > 0) {
+    if (winningTeam === attackerTeam) { attackerLevelChange += zhangBaoBonus; defenderLevelChange -= zhangBaoBonus; }
+    else { defenderLevelChange += zhangBaoBonus; attackerLevelChange -= zhangBaoBonus; }
+  }
+
+  // Build modal HTML using given perspective (names array, dealerLocal index, lastP team-relative)
+  function buildEndModalHTML(names, dealerLocal, lastTeamIsAttacker) {
+    const partnerLocal = (dealerLocal + 2) % 4;
+    return `
+      <div class="modal">
+        <h2>本局结束</h2>
+        <table>
+          <tr><td>主花色</td><td>${SUIT_NAMES[G.trumpSuit]} ${G.level}</td></tr>
+          <tr><td>庄家（守方）</td><td>${names[dealerLocal]} 与 ${names[partnerLocal]}</td></tr>
+          <tr><td>打方抹分</td><td>${attackPoints - bottomPoints} 分（局中）</td></tr>
+          <tr><td>底牌（×2）</td><td>${bottomPoints} 分${lastTeamIsAttacker?'（被打方抠走）':'（守方收住）'}</td></tr>
+          <tr><td>打方总分</td><td>${attackPoints} 分（${descript}）</td></tr>
+          ${kouDiMsg ? `<tr><td>抠底奖励</td><td>${kouDiMsg}</td></tr>` : ''}
+          ${zhangBaoBonus>0 ? `<tr><td>涨包奖励</td><td>底牌含王 +${zhangBaoBonus}</td></tr>` : ''}
+          <tr><td>打方变化</td><td style="color:${attackerLevelChange>=0?'#7f7':'#f88'}">${attackerLevelChange>=0?'+':''}${attackerLevelChange} 级</td></tr>
+          <tr><td>守方变化</td><td style="color:${defenderLevelChange>=0?'#7f7':'#f88'}">${defenderLevelChange>=0?'+':''}${defenderLevelChange} 级</td></tr>
+        </table>
+        <button onclick="closeModal()">关闭</button>
+      </div>`;
+  }
+  const lastTeamIsAttacker = team(lastP) === attackerTeam;
+  // Host/solo local modal
+  const overlay = document.createElement('div');
+  overlay.className = 'modal-overlay';
+  overlay.innerHTML = buildEndModalHTML(PLAYER_NAMES, G.dealer, lastTeamIsAttacker);
+  document.body.appendChild(overlay);
+  window._modal = overlay;
+
+  log(`📊 本局结束。打方共得 ${attackPoints} 分（${descript}）`);
+  renderAll('本局结束');
+
+  // Broadcast per-peer modal
+  if (NET.mode === 'host') {
+    for (const seatStr of Object.keys(NET.peerConns)) {
+      const seat = parseInt(seatStr);
+      const conn = NET.peerConns[seat];
+      if (!conn || !conn.open) continue;
+      const peerNames = [0,1,2,3].map(i => i === 0 ? '你' : PLAYER_NAMES[(seat + i) % 4]);
+      const dealerLocal = (G.dealer - seat + 4) % 4;
+      const html = buildEndModalHTML(peerNames, dealerLocal, lastTeamIsAttacker);
+      conn.send({type:'modal', html});
+    }
+  }
+}
+
+function closeModal() {
+  if (window._modal) { window._modal.remove(); window._modal = null; }
+}
+
+// ===================== AI play =====================
+function aiPlay(p) {
+  if (G.phase !== 'play' || G.current !== p) return;
+  const hand = G.hands[p];
+  let cards;
+  if (G.trickPlays.length === 0) {
+    cards = aiLead(p);
+  } else {
+    cards = aiFollow(p);
+  }
+  if (!cards || cards.length === 0) {
+    // fallback
+    cards = [hand[0]];
+  }
+  submitPlay(p, cards);
+}
+
+function aiLead(p) {
+  const hand = G.hands[p];
+  // Strategy:
+  // - If hand has non-trump A in a suit with cards, lead it
+  // - Else lead a small non-trump card
+  // - If hand is mostly trump, lead small trump
+  const nonTrumpAces = hand.filter(c => !isTrump(c) && c.rank === 'A');
+  if (nonTrumpAces.length > 0) {
+    // Find an A in a suit where partner likely has cards too — just pick any
+    return [nonTrumpAces[0]];
+  }
+  // Try a pair in non-trump (high value)
+  const allPairs = findAllPairs(hand);
+  const nonTrumpPairs = allPairs.filter(pr => !isTrump(pr[0]));
+  if (nonTrumpPairs.length > 0) {
+    // lead a high non-trump pair
+    nonTrumpPairs.sort((a,b)=>cardStrength(b[0])-cardStrength(a[0]));
+    if (cardStrength(nonTrumpPairs[0][0]) >= 110) return nonTrumpPairs[0]; // K or A pair
+  }
+  // Lead smallest non-trump card
+  const nonTrump = hand.filter(c => !isTrump(c));
+  if (nonTrump.length > 0) {
+    nonTrump.sort((a,b)=>cardStrength(a)-cardStrength(b));
+    return [nonTrump[0]];
+  }
+  // All trump — lead smallest
+  const trumps = hand.slice().sort((a,b)=>cardStrength(a)-cardStrength(b));
+  return [trumps[0]];
+}
+
+function aiFollow(p) {
+  const hand = G.hands[p];
+  const lead = G.trickPlays[0];
+  const leadCards = lead.cards;
+  const leadType = detectPlayType(leadCards);
+  const leadSuit = effectiveSuit(leadCards[0]);
+  // Determine current winner
+  let curWinner = lead;
+  let curStr = playStrength(lead.cards);
+  for (let i=1; i<G.trickPlays.length; i++) {
+    const pl = G.trickPlays[i];
+    const plType = detectPlayType(pl.cards);
+    if (plType !== leadType) continue;
+    const plSuit = effectiveSuit(pl.cards[0]);
+    if (!pl.cards.every(c => effectiveSuit(c) === plSuit)) continue;
+    const wSuit = effectiveSuit(curWinner.cards[0]);
+    const plStr = playStrength(pl.cards);
+    if (plSuit === wSuit) {
+      if (plStr > curStr) { curWinner = pl; curStr = plStr; }
+    } else if (plSuit === 'T' && wSuit !== 'T') { curWinner = pl; curStr = plStr; }
+  }
+  const teammateWinning = team(curWinner.player) === team(p);
+  const totalPoints = G.trickPlays.reduce((s,pl) => s + pl.cards.reduce((a,c)=>a+c.points,0),0);
+  const isLast = G.trickPlays.length === 3;
+  const myOfSuit = hand.filter(c => effectiveSuit(c) === leadSuit);
+
+  if (leadType === 'single') {
+    if (myOfSuit.length > 0) {
+      // Must follow suit
+      if (teammateWinning) {
+        // dump high point card if can: K, 10, 5
+        const pointsCards = myOfSuit.filter(c => c.points > 0);
+        if (pointsCards.length > 0) {
+          // pick highest point that doesn't beat partner — but if partner is winning we can't "beat" them anyway since same suit lower
+          pointsCards.sort((a,b)=>b.points-a.points);
+          return [pointsCards[0]];
+        }
+        // dump lowest
+        myOfSuit.sort((a,b)=>cardStrength(a)-cardStrength(b));
+        return [myOfSuit[0]];
+      } else {
+        // try to beat opponent
+        const winners = myOfSuit.filter(c => cardStrength(c) > curStr);
+        if (winners.length > 0) {
+          winners.sort((a,b)=>cardStrength(a)-cardStrength(b)); // smallest winner
+          return [winners[0]];
+        }
+        // can't beat: dump lowest
+        myOfSuit.sort((a,b)=>cardStrength(a)-cardStrength(b));
+        return [myOfSuit[0]];
+      }
+    }
+    // No suit cards — can trump or discard
+    if (!teammateWinning && curWinner.player !== p) {
+      // try to trump (cheaply) to win the trick if points > 0 or always
+      const myTrumps = hand.filter(c => isTrump(c));
+      if (myTrumps.length > 0 && (totalPoints >= 5 || isLast)) {
+        // beat current winner
+        const trumpWinners = myTrumps.filter(c => cardStrength(c) > curStr || effectiveSuit(curWinner.cards[0]) !== 'T');
+        if (trumpWinners.length > 0) {
+          trumpWinners.sort((a,b)=>cardStrength(a)-cardStrength(b));
+          return [trumpWinners[0]];
+        }
+      }
+    }
+    // discard worst
+    const sorted = hand.slice().sort((a,b)=>cardStrength(a)-cardStrength(b));
+    // prefer non-trump non-point discards
+    const trash = sorted.filter(c=>!isTrump(c) && c.points===0);
+    if (trash.length > 0) return [trash[0]];
+    return [sorted[0]];
+  }
+
+  // Lead is pair
+  const pairsOfSuit = findAllPairs(myOfSuit);
+  if (pairsOfSuit.length > 0) {
+    if (teammateWinning) {
+      // dump lowest pair
+      pairsOfSuit.sort((a,b)=>cardStrength(a[0])-cardStrength(b[0]));
+      return pairsOfSuit[0];
+    }
+    // try to beat
+    const beating = pairsOfSuit.filter(pr => cardStrength(pr[0]) > curStr);
+    if (beating.length > 0) {
+      beating.sort((a,b)=>cardStrength(a[0])-cardStrength(b[0]));
+      return beating[0];
+    }
+    pairsOfSuit.sort((a,b)=>cardStrength(a[0])-cardStrength(b[0]));
+    return pairsOfSuit[0];
+  }
+  if (myOfSuit.length >= 2) {
+    myOfSuit.sort((a,b)=>cardStrength(a)-cardStrength(b));
+    return [myOfSuit[0], myOfSuit[1]];
+  }
+  if (myOfSuit.length === 1) {
+    // must include the one suit card; pair with lowest other
+    const others = hand.filter(c => c !== myOfSuit[0]).sort((a,b)=>cardStrength(a)-cardStrength(b));
+    return [myOfSuit[0], others[0]];
+  }
+  // No suit at all
+  // Try trump pair if beneficial
+  if (!teammateWinning) {
+    const myTrumps = hand.filter(c=>isTrump(c));
+    const trumpPairs = findAllPairs(myTrumps);
+    if (trumpPairs.length > 0 && (totalPoints >= 10 || isLast)) {
+      // smallest trump pair that beats
+      const beating = trumpPairs.filter(pr => effectiveSuit(curWinner.cards[0]) !== 'T' || cardStrength(pr[0]) > curStr);
+      if (beating.length > 0) {
+        beating.sort((a,b)=>cardStrength(a[0])-cardStrength(b[0]));
+        return beating[0];
+      }
+    }
+  }
+  // discard 2 worst non-points
+  const sorted = hand.slice().sort((a,b)=>cardStrength(a)-cardStrength(b));
+  const trash = sorted.filter(c=>!isTrump(c) && c.points===0);
+  if (trash.length >= 2) return [trash[0], trash[1]];
+  return [sorted[0], sorted[1]];
+}
+
+// ===================== Network =====================
+// Rotate global game state so peer at globalSeat g sees themselves at index 0
+function rotateStateForPeer(g) {
+  const r = (i) => (i - g + 4) % 4;
+  const rotIfPos = (i) => i >= 0 ? r(i) : i;
+  const localHands = [0,1,2,3].map(i => {
+    const globalIdx = (g + i) % 4;
+    if (globalIdx === g) {
+      // peer's own hand: send full cards
+      return G.hands[globalIdx].slice();
+    }
+    // others: send as count placeholder
+    return new Array(G.hands[globalIdx].length).fill(null).map((_, k) => ({_back: true, id: `b_${globalIdx}_${k}`}));
+  });
+  // pointsByTeam: team 0 = seats 0,2; team 1 = seats 1,3. Peer at g sees self as 0 -> "my team" should appear at index 0.
+  const teamShift = g % 2;
+  return {
+    level: G.level,
+    trumpSuit: G.trumpSuit,
+    declarer: rotIfPos(G.declarer),
+    dealer: rotIfPos(G.dealer),
+    declareIsPair: G.declareIsPair,
+    declareTurn: G.declareTurn,
+    current: r(G.current),
+    hands: localHands,
+    bottom: G.bottom,
+    bottomCollected: G.bottomCollected,
+    ganbaguo: G.ganbaguo,
+    trickPlays: G.trickPlays.map(p => ({player: r(p.player), cards: p.cards})),
+    pointsByTeam: teamShift ? [G.pointsByTeam[1], G.pointsByTeam[0]] : G.pointsByTeam.slice(),
+    trickCount: G.trickCount,
+    phase: G.phase,
+    lastTrickWinner: rotIfPos(G.lastTrickWinner),
+    playerNames: [0,1,2,3].map(i => i === 0 ? '你' : PLAYER_NAMES[(g + i) % 4]),
+  };
+}
+// declareTurn rotates too
+function rotatedDeclareTurn(g) {
+  if (G.declareTurn === undefined || G.declareTurn >= 4) return G.declareTurn;
+  return (G.declareTurn - g + 4) % 4;
+}
+
+function netBroadcastState(msg) {
+  if (NET.mode !== 'host') return;
+  for (const seatStr of Object.keys(NET.peerConns)) {
+    const seat = parseInt(seatStr);
+    const conn = NET.peerConns[seat];
+    if (!conn || !conn.open) continue;
+    const view = rotateStateForPeer(seat);
+    view.declareTurn = rotatedDeclareTurn(seat);
+    conn.send({type:'state', state: view, msg});
+  }
+}
+function netBroadcastLog(text) {
+  if (NET.mode !== 'host') return;
+  for (const seat of Object.keys(NET.peerConns)) {
+    const conn = NET.peerConns[seat];
+    if (conn && conn.open) conn.send({type:'log', text});
+  }
+}
+function netBroadcastToast(text) {
+  if (NET.mode !== 'host') return;
+  for (const seat of Object.keys(NET.peerConns)) {
+    const conn = NET.peerConns[seat];
+    if (conn && conn.open) conn.send({type:'toast', text});
+  }
+}
+function netBroadcastModal(html) {
+  if (NET.mode !== 'host') return;
+  for (const seat of Object.keys(NET.peerConns)) {
+    const conn = NET.peerConns[seat];
+    if (conn && conn.open) conn.send({type:'modal', html});
+  }
+}
+
+// Host: handle action from peer
+function onPeerAction(globalSeat, action) {
+  switch (action.action) {
+    case 'declare':
+      if (G.phase !== 'declare' || G.declareTurn !== globalSeat) return;
+      // validate: peer must have the level cards
+      const counts = findLevelCounts(G.hands[globalSeat], G.level);
+      const need = action.isPair ? 2 : 1;
+      if ((counts[action.suit]||0) < need) return;
+      const newStr = declareStrength(action.suit, action.isPair);
+      if (newStr <= currentDeclareStrength()) return;
+      performDeclare(globalSeat, action.suit, action.isPair);
+      break;
+    case 'pass':
+      if (G.phase !== 'declare' || G.declareTurn !== globalSeat) return;
+      performPassDeclare(globalSeat);
+      break;
+    case 'play': {
+      if (G.phase !== 'play' || G.current !== globalSeat) return;
+      const ids = new Set(action.cardIds || []);
+      const cards = G.hands[globalSeat].filter(c => ids.has(c.id));
+      if (cards.length !== ids.size) return;
+      const err = validatePlay(globalSeat, cards);
+      if (err) {
+        const conn = NET.peerConns[globalSeat];
+        if (conn) conn.send({type:'toast', text: err});
+        return;
+      }
+      submitPlay(globalSeat, cards);
+      break;
+    }
+    case 'bottom': {
+      if (G.phase !== 'bottom' || G.dealer !== globalSeat) return;
+      const ids = new Set(action.cardIds || []);
+      const dis = G.hands[globalSeat].filter(c => ids.has(c.id));
+      if (dis.length !== 8) return;
+      finalizeBottom(dis);
+      break;
+    }
+    case 'startNewRound':
+      if (globalSeat !== 0 /* only host triggers */ && G.phase === 'over') {
+        // allow any peer to request? for simplicity, only host re-starts
+      }
+      break;
+  }
+}
+
+// ===================== Lobby =====================
+function showMode(m) {
+  document.getElementById('lobby-main').classList.toggle('hidden', m !== 'main');
+  document.getElementById('lobby-host').classList.toggle('hidden', m !== 'host');
+  document.getElementById('lobby-join').classList.toggle('hidden', m !== 'join');
+  if (m === 'solo') doSolo();
+  // pre-fill from URL hash
+  if (m === 'join') {
+    const h = location.hash.match(/room=([^&]+)/);
+    if (h && !document.getElementById('join-code').value) {
+      document.getElementById('join-code').value = decodeURIComponent(h[1]);
+    }
+  }
+}
+
+function doSolo() {
+  NET.mode = 'solo';
+  NET.isHuman = [true, false, false, false];
+  PLAYER_NAMES = ['你', '玩家1', '玩家2', '玩家3'];
+  hideLobby();
+  renderAll('点击"开始新局"开始游戏');
+}
+
+function hideLobby() {
+  document.getElementById('lobby').classList.add('hidden');
+}
+function showLobby() {
+  document.getElementById('lobby').classList.remove('hidden');
+}
+
+async function doHost() {
+  const name = (document.getElementById('host-name').value || '房主').slice(0, 10);
+  NET.myName = name;
+  NET.mode = 'host';
+  PLAYER_NAMES = [name, 'AI 玩家1', 'AI 玩家2', 'AI 玩家3'];
+  NET.isHuman = [true, false, false, false];
+  const status = document.getElementById('host-status');
+  const buttons = document.getElementById('host-buttons');
+  status.innerHTML = '<div class="room-info">正在连接信令服务器...</div>';
+  try {
+    NET.peer = new Peer();
+    NET.peer.on('open', id => {
+      NET.roomCode = id;
+      const url = location.href.split('#')[0] + '#room=' + encodeURIComponent(id);
+      status.innerHTML = `
+        <div class="room-info">
+          房间码：<span class="room-code">${id}</span>
+          <button style="font-size:12px;padding:4px 8px;margin-left:6px;" onclick="navigator.clipboard.writeText('${id}').then(()=>toast('已复制房间码'))">复制码</button>
+          <br>邀请链接：<br>
+          <span style="font-size:11px;color:#aef;word-break:break-all;">${url}</span>
+          <button style="font-size:12px;padding:4px 8px;margin:6px 0;" onclick="navigator.clipboard.writeText('${url}').then(()=>toast('已复制链接'))">复制链接</button>
+        </div>
+        <div class="peer-list" id="peer-list">
+          <div class="item">座位 0：${name}（你）</div>
+          <div class="item">座位 1：等待加入（不填则补 AI）</div>
+          <div class="item">座位 2：等待加入（不填则补 AI）</div>
+          <div class="item">座位 3：等待加入（不填则补 AI）</div>
+        </div>
+      `;
+      buttons.innerHTML = `
+        <button onclick="startHostGame()">开始游戏</button>
+        <button class="back" onclick="cancelHost()">取消</button>
+      `;
+    });
+    NET.peer.on('connection', conn => {
+      conn.on('open', () => {
+        // assign next available human seat
+        let seat = -1;
+        for (let s = 1; s <= 3; s++) {
+          if (!NET.peerConns[s] || !NET.peerConns[s].open) { seat = s; break; }
+        }
+        if (seat < 0) {
+          conn.send({type:'error', text:'房间已满'});
+          setTimeout(()=>conn.close(), 200);
+          return;
+        }
+        NET.peerConns[seat] = conn;
+        NET.peerSeatByConnId[conn.connectionId || conn.peer] = seat;
+        conn.on('data', data => {
+          if (data.type === 'join') {
+            const peerName = (data.name || `玩家${seat}`).slice(0,10);
+            PLAYER_NAMES[seat] = peerName;
+            NET.isHuman[seat] = true;
+            conn.send({type:'welcome', seat, names: [0,1,2,3].map(i => i===0?'你':PLAYER_NAMES[(seat+i)%4]) });
+            updatePeerList();
+            toast(`${peerName} 加入座位 ${seat}`);
+            // also push current state if mid-game
+            if (G.phase !== 'idle') {
+              const view = rotateStateForPeer(seat);
+              view.declareTurn = rotatedDeclareTurn(seat);
+              conn.send({type:'state', state: view});
+            }
+          } else if (data.type === 'action') {
+            const g = NET.peerSeatByConnId[conn.connectionId || conn.peer];
+            if (g) onPeerAction(g, data);
+          }
+        });
+        conn.on('close', () => {
+          NET.peerConns[seat] = null;
+          NET.isHuman[seat] = false;
+          PLAYER_NAMES[seat] = `AI 玩家${seat}`;
+          updatePeerList();
+          toast(`座位 ${seat} 的玩家断线，转为 AI`);
+          // resume the game if it was this seat's turn
+          if (G.phase === 'declare' && G.declareTurn === seat) {
+            setTimeout(() => aiDecideDeclare(seat), 500);
+          } else if (G.phase === 'bottom' && G.dealer === seat) {
+            setTimeout(() => aiBottom(), 500);
+          } else if (G.phase === 'play' && G.current === seat) {
+            setTimeout(() => aiPlay(seat), 500);
+          }
+          renderAll();
+        });
+      });
+    });
+    NET.peer.on('error', e => {
+      status.innerHTML = `<div class="room-info" style="color:#f88;">错误: ${e.message || e.type}</div>`;
+    });
+  } catch (e) {
+    status.innerHTML = `<div class="room-info" style="color:#f88;">错误: ${e.message}</div>`;
+  }
+}
+
+function updatePeerList() {
+  const list = document.getElementById('peer-list');
+  if (!list) return;
+  list.innerHTML = '';
+  for (let s = 0; s <= 3; s++) {
+    const label = s === 0 ? `${PLAYER_NAMES[0]}（你）` : (NET.isHuman[s] ? PLAYER_NAMES[s] : '等待加入（不填则补 AI）');
+    list.innerHTML += `<div class="item">座位 ${s}：${label}</div>`;
+  }
+}
+
+function cancelHost() {
+  if (NET.peer) NET.peer.destroy();
+  NET.peer = null;
+  NET.peerConns = {1:null,2:null,3:null};
+  showMode('main');
+  document.getElementById('host-status').innerHTML = '';
+  document.getElementById('host-buttons').innerHTML = `
+    <button onclick="doHost()">开房</button>
+    <button class="back" onclick="showMode('main')">返回</button>
+  `;
+}
+
+function startHostGame() {
+  hideLobby();
+  renderAll('准备开始...');
+  startGame();
+}
+
+async function doJoin() {
+  const name = (document.getElementById('join-name').value || '玩家').slice(0,10);
+  const code = (document.getElementById('join-code').value || '').trim();
+  if (!code) { document.getElementById('join-status').innerHTML = '<div class="room-info" style="color:#f88;">请输入房间码</div>'; return; }
+  NET.mode = 'client';
+  NET.myName = name;
+  const status = document.getElementById('join-status');
+  status.innerHTML = '<div class="room-info">连接中...</div>';
+  try {
+    NET.peer = new Peer();
+    NET.peer.on('open', () => {
+      const conn = NET.peer.connect(code, {reliable: true});
+      NET.hostConn = conn;
+      conn.on('open', () => {
+        conn.send({type:'join', name});
+        status.innerHTML = '<div class="room-info" style="color:#7f7;">已连接，等待房主开始...</div>';
+      });
+      conn.on('data', onClientReceive);
+      conn.on('close', () => {
+        toast('与房主断开连接');
+        showLobby();
+      });
+    });
+    NET.peer.on('error', e => {
+      status.innerHTML = `<div class="room-info" style="color:#f88;">错误: ${e.message || e.type}</div>`;
+    });
+  } catch (e) {
+    status.innerHTML = `<div class="room-info" style="color:#f88;">错误: ${e.message}</div>`;
+  }
+}
+
+function onClientReceive(data) {
+  if (data.type === 'welcome') {
+    PLAYER_NAMES = data.names || PLAYER_NAMES;
+    toast(`已加入座位 ${data.seat}`);
+  } else if (data.type === 'state') {
+    const v = data.state;
+    if (v.playerNames) PLAYER_NAMES = v.playerNames;
+    // fill G from view
+    G.level = v.level;
+    G.trumpSuit = v.trumpSuit;
+    G.declarer = v.declarer;
+    G.dealer = v.dealer;
+    G.declareIsPair = v.declareIsPair;
+    G.declareTurn = v.declareTurn;
+    G.current = v.current;
+    G.hands = v.hands;
+    G.bottom = v.bottom;
+    G.bottomCollected = v.bottomCollected;
+    G.ganbaguo = v.ganbaguo;
+    G.trickPlays = v.trickPlays;
+    G.pointsByTeam = v.pointsByTeam;
+    G.trickCount = v.trickCount;
+    G.phase = v.phase;
+    G.lastTrickWinner = v.lastTrickWinner;
+    hideLobby();
+    renderAll(data.msg);
+  } else if (data.type === 'log') {
+    log(data.text);
+  } else if (data.type === 'toast') {
+    toast(data.text);
+  } else if (data.type === 'modal') {
+    const overlay = document.createElement('div');
+    overlay.className = 'modal-overlay';
+    overlay.innerHTML = data.html;
+    document.body.appendChild(overlay);
+    window._modal = overlay;
+  } else if (data.type === 'error') {
+    toast(data.text);
+  }
+}
+
+// Override log/toast to broadcast in host mode
+const _origLog = log;
+log = function(msg) {
+  _origLog(msg);
+  netBroadcastLog(msg);
+};
+const _origToast = toast;
+toast = function(msg, ms) {
+  _origToast(msg, ms);
+  netBroadcastToast(msg);
+};
+
+// Hook renderAll to broadcast state
+const _origRenderAll = renderAll;
+renderAll = function(msg) {
+  _origRenderAll(msg);
+  netBroadcastState(msg);
+};
+
+// ===================== Init =====================
+// Show lobby on load. Pre-fill room code from URL hash.
+const hashRoom = location.hash.match(/room=([^&]+)/);
+if (hashRoom) {
+  showMode('join');
+}
+renderAll();
+</script>
+</body>
+</html>
